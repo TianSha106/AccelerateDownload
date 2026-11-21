@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HyperFlow · 多线程下载加速器</title>
+<style>
+/* ================= 基础 ================= */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#05080d;
+  --panel:rgba(14,21,32,.78);
+  --panel-2:rgba(20,29,43,.72);
+  --line:rgba(126,164,196,.16);
+  --line-strong:rgba(126,164,196,.3);
+  --txt:#e8f1f8;
+  --muted:#8698ad;
+  --dim:#5d7186;
+  --accent:#2be1c4;
+  --accent-2:#7ee787;
+  --warn:#ffb457;
+  --danger:#ff6f6f;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+html,body{min-height:100%}
+body{
+  background:var(--bg);
+  color:var(--txt);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  padding:40px 20px 80px;
+  position:relative;
+  overflow-x:hidden;
+}
+/* 背景装饰 */
+.bg-grid{
+  position:fixed;inset:0;z-index:-3;
+  background-image:
+    linear-gradient(rgba(120,170,200,.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(120,170,200,.055) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 90% 65% at 50% 0%,#000 20%,transparent 78%);
+  -webkit-mask-image:radial-gradient(ellipse 90% 65% at 50% 0%,#000 20%,transparent 78%);
+}
+.glow{position:fixed;border-radius:50%;filter:blur(90px);z-index:-2;pointer-events:none}
+.glow-a{width:520px;height:520px;left:-140px;top:-180px;background:rgba(43,225,196,.16)}
+.glow-b{width:600px;height:600px;right:-200px;top:-240px;background:rgba(80,140,255,.14)}
+.glow-c{width:420px;height:420px;left:40%;bottom:-260px;background:rgba(126,231,135,.07)}
+
+/* ================= 布局 ================= */
+main{max-width:960px;margin:0 auto;position:relative}
+
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:20px;flex-wrap:wrap;margin-bottom:26px;
+}
+.brand{display:flex;align-items:center;gap:14px}
+.mark{
+  width:46px;height:46px;border-radius:13px;
+  display:grid;place-items:center;
+  background:linear-gradient(150deg,rgba(43,225,196,.22),rgba(80,140,255,.12));
+  border:1px solid rgba(43,225,196,.4);
+  box-shadow:0 0 24px rgba(43,225,196,.16) inset;
+}
+.mark svg{width:24px;height:24px;stroke:var(--accent);fill:none;stroke-width:2;stroke-linecap:round}
+.brand-text h1{font-size:20px;letter-spacing:.6px;font-weight:650}
+.brand-text h1 span{color:var(--accent)}
+.brand-text p{font-size:12.5px;color:var(--muted);margin-top:3px;letter-spacing:.3px}
+.pill{
+  font-size:11.5px;color:var(--muted);letter-spacing:.6px;
+  border:1px solid var(--line);border-radius:999px;
+  padding:7px 14px;background:rgba(255,255,255,.03);
+  display:flex;align-items:center;gap:8px;white-space:nowrap;
+}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 8px var(--accent-2)}
+
+.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  padding:20px;
+  box-shadow:0 20px 50px -30px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.04) inset;
+}
+.panel + .panel{margin-top:16px}
+
+/* ================= 输入区 ================= */
+.url-row{display:flex;gap:10px;flex-wrap:wrap}
+.url-field{
+  flex:1 1 380px;min-width:0;
+  display:flex;align-items:center;gap:10px;
+  background:rgba(6,11,18,.85);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:0 14px;
+  transition:border-color .2s,box-shadow .2s;
+}
+.url-field:focus-within{
+  border-color:rgba(43,225,196,.55);
+  box-shadow:0 0 0 3px rgba(43,225,196,.1);
+}
+.url-field svg{width:16px;height:16px;stroke:var(--dim);flex:none;fill:none;stroke-width:1.8}
+#urlInput{
+  flex:1;min-width:0;height:52px;
+  background:none;border:0;outline:0;color:var(--txt);
+  font-size:14px;font-family:var(--mono);letter-spacing:.2px;
+}
+#urlInput::placeholder{color:#4e6274;font-family:-apple-system,"PingFang SC",sans-serif;letter-spacing:0}
+
+.btn{
+  border:1px solid var(--line);border-radius:12px;
+  background:rgba(255,255,255,.045);
+  color:var(--txt);font-size:13.5px;
+  padding:0 18px;height:52px;cursor:pointer;
+  transition:.18s ease;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn:hover{background:rgba(255,255,255,.09);border-color:var(--line-strong)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.primary{
+  background:linear-gradient(135deg,#2be1c4,#3ad0a5);
+  color:#03130f;font-weight:700;letter-spacing:.4px;border-color:transparent;
+  box-shadow:0 10px 26px -12px rgba(43,225,196,.75);
+}
+.btn.primary:hover{filter:brightness(1.06);background:linear-gradient(135deg,#2be1c4,#3ad0a5)}
+.btn.ghost{padding:0 14px;height:52px;color:var(--muted);font-size:13px}
+.btn.small{height:34px;padding:0 12px;font-size:12px;border-radius:9px}
+.btn.danger{color:var(--danger);border-color:rgba(255,111,111,.35)}
+.btn.danger:hover{background:rgba(255,111,111,.12)}
+
+/* 选项行 */
+.options{
+  margin-top:18px;padding-top:18px;border-top:1px dashed rgba(126,164,196,.14);
+  display:flex;align-items:center;gap:26px;flex-wrap:wrap;
+}
+.opt{display:flex;align-items:center;gap:12px}
+.opt-label{font-size:12.5px;color:var(--muted);letter-spacing:.4px;white-space:nowrap}
+.opt-label b{color:var(--accent);font-family:var(--mono);font-size:14px;font-weight:600;margin-left:2px}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  width:170px;height:4px;border-radius:99px;outline:none;
+  background:linear-gradient(90deg,var(--accent) var(--p,25%),rgba(255,255,255,.12) var(--p,25%));
+  cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:#0a1218;border:2px solid var(--accent);
+  box-shadow:0 0 12px rgba(43,225,196,.7);cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:#0a1218;
+  border:2px solid var(--accent);box-shadow:0 0 12px rgba(43,225,196,.7);cursor:pointer;
+}
+.chips{display:flex;gap:6px}
+.chip{
+  font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  border:1px solid var(--line);background:rgba(255,255,255,.03);
+  border-radius:7px;padding:5px 9px;cursor:pointer;transition:.16s;
+}
+.chip:hover{color:var(--txt);border-color:var(--line-strong)}
+.chip.on{color:var(--accent);border-color:rgba(43,225,196,.5);background:rgba(43,225,196,.1)}
+.file-opt{flex:1;min-width:200px;justify-content:flex-end}
+#nameInput{
+  background:rgba(6,11,18,.85);border:1px solid var(--line);border-radius:9px;
+  color:var(--txt);font-size:12.5px;font-family:var(--mono);
+  height:34px;padding:0 11px;outline:none;width:100%;max-width:260px;
+  transition:border-color .2s;
+}
+#nameInput:focus{border-color:rgba(43,225,196,.5)}
+
+/* ================= 状态 / 指标 ================= */
+.stats-head{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  margin-bottom:16px;flex-wrap:wrap;
+}
+.status-tag{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:12px;letter-spacing:.5px;
+  border-radius:999px;padding:6px 13px;
+  border:1px solid var(--line);color:var(--muted);background:rgba(255,255,255,.03);
+}
+.status-tag .led{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+.status-tag[data-s=running]{color:var(--accent);border-color:rgba(43,225,196,.4);background:rgba(43,225,196,.08)}
+.status-tag[data-s=running] .led{background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 1.2s infinite}
+.status-tag[data-s=done]{color:var(--accent-2);border-color:rgba(126,231,135,.4);background:rgba(126,231,135,.08)}
+.status-tag[data-s=done] .led{background:var(--accent-2);box-shadow:0 0 10px var(--accent-2)}
+.status-tag[data-s=error]{color:var(--danger);border-color:rgba(255,111,111,.4);background:rgba(255,111,111,.08)}
+.status-tag[data-s=error] .led{background:var(--danger);box-shadow:0 0 10px var(--danger)}
+.status-tag[data-s=paused]{color:var(--warn);border-color:rgba(255,180,87,.4);background:rgba(255,180,87,.08)}
+.status-tag[data-s=paused] .led{background:var(--warn)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.head-actions{display:flex;gap:8px}
+.hint-mini{font-size:11.5px;color:var(--dim);letter-spacing:.3px}
+
+.metrics{
+  display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:12px;
+}
+.metric{
+  border:1px solid var(--line);border-radius:12px;
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
+  padding:13px 15px;
+  min-width:0;
+}
+.metric .k{font-size:11px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase}
+.metric .v{
+  margin-top:7px;font-family:var(--mono);font-size:24px;font-weight:600;
+  letter-spacing:-.4px;line-height:1.1;font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.metric .v small{font-size:11px;color:var(--muted);font-weight:400;margin-left:3px;letter-spacing:0}
+.metric.speed .v{color:var(--accent)}
+.metric.speed .v small{color:rgba(43,225,196,.6)}
+
+/* 分片进度条 */
+.seg-wrap{margin-top:18px}
+.seg-top{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:var(--dim);margin-bottom:8px;letter-spacing:.4px}
+.seg-top .pct{font-family:var(--mono);font-size:13px;color:var(--txt);font-variant-numeric:tabular-nums}
+.segments{
+  display:flex;gap:3px;height:30px;padding:3px;
+  border:1px solid var(--line);border-radius:10px;
+  background:rgba(4,8,14,.7);overflow:hidden;
+}
+.seg{
+  flex:1 1 0;min-width:2px;border-radius:4px;position:relative;overflow:hidden;
+  background:rgba(255,255,255,.055);
+}
+.seg i{
+  position:absolute;left:0;top:0;bottom:0;width:0;
+  background:linear-gradient(90deg,rgba(43,225,196,.55),var(--accent));
+  transition:width .18s linear;
+  box-shadow:0 0 10px rgba(43,225,196,.35);
+}
+.seg.done i{width:100%!important;background:linear-gradient(90deg,rgba(126,231,135,.7),var(--accent-2))}
+.seg.err i{width:100%!important;background:var(--danger)}
+.conns{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;min-height:18px}
+.conn{
+  font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  border:1px solid var(--line);border-radius:6px;padding:2px 7px;
+  display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.025);
+}
+.conn b{color:var(--accent);font-weight:600}
+.conn.idle{opacity:.45}
+
+/* ================= 日志 ================= */
+.log-panel{padding:0;overflow:hidden}
+.log-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--line);
+  font-size:12px;color:var(--muted);letter-spacing:.6px;
+}
+.log-head .dot-l{display:flex;gap:6px;align-items:center}
+.log-head .c{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.12)}
+.log{
+  height:200px;overflow-y:auto;padding:12px 18px 16px;
+  font-family:var(--mono);font-size:12px;line-height:1.85;
+  scrollbar-width:thin;scrollbar-color:rgba(126,164,196,.25) transparent;
+}
+.log::-webkit-scrollbar{width:6px}
+.log::-webkit-scrollbar-thumb{background:rgba(126,164,196,.22);border-radius:99px}
+.log-line{display:flex;gap:10px;color:var(--muted)}
+.log-line .t{color:#4c6175;flex:none}
+.log-line.ok{color:var(--accent-2)}
+.log-line.info{color:#a8bccd}
+.log-line.warn{color:var(--warn)}
+.log-line.err{color:var(--danger)}
+.log-empty{color:#44586a;font-size:12px;font-family:var(--mono)}
+
+/* ================= 说明 ================= */
+.notes{padding:18px 20px}
+.notes h3{font-size:12.5px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.notes h3::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--accent)}
+.note-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.note{
+  border:1px solid var(--line);border-radius:11px;padding:13px 14px;
+  background:rgba(255,255,255,.025);
+}
+.note h4{font-size:12.5px;color:var(--txt);margin-bottom:6px;letter-spacing:.3px}
+.note p{font-size:11.8px;line-height:1.75;color:var(--muted)}
+.note code{font-family:var(--mono);color:var(--accent);font-size:11px;background:rgba(43,225,196,.08);padding:1px 5px;border-radius:4px}
+
+footer{margin-top:26px;text-align:center;font-size:11px;color:#3f5364;letter-spacing:.8px}
+
+@media (max-width:820px){
+  body{padding:24px 14px 60px}
+  .metrics{grid-template-columns:1fr 1fr}
+  .metric .v{font-size:20px}
+  .options{gap:16px}
+  .file-opt{justify-content:flex-start}
+  input[type=range]{width:130px}
+  .segments{height:26px}
+}
+@media (max-width:520px){
+  .brand-text h1{font-size:17px}
+  .pill{display:none}
+  .btn.primary{flex:1}
+  .url-row .btn{height:46px}
+  .url-field{height:46px}
+  #urlInput{height:46px;font-size:12.5px}
+  .segments{height:22px;gap:2px}
+}
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="glow glow-a"></div>
+<div class="glow glow-b"></div>
+<div class="glow glow-c"></div>
+
+<main>
+  <header>
+    <div class="brand">
+      <div class="mark">
+        <svg viewBox="0 0 24 24"><path d="M12 4v12M12 16l-4.2-4.2M12 16l4.2-4.2"/><path d="M5 20h14"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>HYPER<span>FLOW</span></h1>
+        <p>多线程分片下载加速器 · 纯浏览器端运行</p>
+      </div>
+    </div>
+    <div class="pill"><span class="dot"></span>Web Worker 并发 &amp; HTTP Range</div>
+  </header>
+
+  <!-- ============ 输入 ============ -->
+  <section class="panel">
+    <div class="url-row">
+      <div class="url-field">
+        <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/></svg>
+        <input id="urlInput" type="text" spellcheck="false" autocomplete="off"
+               placeholder="粘贴文件直链，例如 https://cdn.example.com/file.zip">
+      </div>
+      <button class="btn ghost" id="pasteBtn">粘贴</button>
+      <button class="btn primary" id="startBtn">开始加速</button>
+    </div>
+
+    <div class="options">
+      <div class="opt">
+        <span class="opt-label">并发线程<b id="threadVal">8</b></span>
+        <input type="range" id="threadRange" min="1" max="32" value="8" step="1">
+      </div>
+      <div class="chips" id="chips">
+        <button class="chip" data-n="2">2</button>
+        <button class="chip" data-n="4">4</button>
+        <button class="chip on" data-n="8">8</button>
+        <button class="chip" data-n="16">16</button>
+        <button class="chip" data-n="32">32</button>
+      </div>
+      <div class="opt file-opt">
+        <span class="opt-label">保存名称</span>
+        <input id="nameInput" type="text" spellcheck="false" placeholder="自动识别">
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 状态 ============ -->
+  <section class="panel">
+    <div class="stats-head">
+      <div class="status-tag" id="statusTag" data-s="idle"><span class="led"></span><span id="statusText">待机中 · 等待直链</span></div>
+      <div class="head-actions">
+        <button class="btn small" id="sampleBtn">填入示例直链</button>
+        <button class="btn small danger" id="resetBtn">重置</button>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric speed">
+        <div class="k">实时速度</div>
+        <div class="v" id="speedVal">0.00 <small>MB/s</small></div>
+      </div>
+      <div class="metric">
+        <div class="k">已下载</div>
+        <div class="v" id="doneVal">0 <small>/ —</small></div>
+      </div>
+      <div class="metric">
+        <div class="k">剩余时间</div>
+        <div class="v" id="etaVal">— <small></small></div>
+      </div>
+      <div class="metric">
+        <div class="k">活动连接</div>
+        <div class="v" id="connVal">0 <small>/ 0</small></div>
+      </div>
+    </div>
+
+    <div class="seg-wrap">
+      <div class="seg-top">
+        <span id="segInfo">等待任务 · 0 个分片</span>
+        <span class="pct" id="pctVal">0.0%</span>
+      </div>
+      <div class="segments" id="segments"></div>
+      <div class="conns" id="conns"></div>
+    </div>
+  </section>
+
+  <!-- ============ 日志 ============ -->
+  <section class="panel log-panel">
+    <div class="log-head">
+      <span class="dot-l"><span class="c"></span>运行日志</span>
+      <span id="logMode">自动降级引擎就绪</span>
+    </div>
+    <div class="log" id="log">
+      <div class="log-empty">// 引擎已初始化，等待直链输入…</div>
+    </div>
+  </section>
+
+  <!-- ============ 说明 ============ -->
+  <section class="panel notes">
+    <h3>工作原理与限制</h3>
+    <div class="note-grid">
+      <div class="note">
+        <h4>分片并发</h4>
+        <p>通过 <code>HTTP Range</code> 把文件切成多段，由多个 <code>Web Worker</code> 同时请求，合并后统一保存，理论上可跑满带宽。</p>
+      </div>
+      <div class="note">
+        <h4>需要服务端支持</h4>
+        <p>目标站点必须返回 <code>206 Partial Content</code> 且开放 <code>CORS</code>；否则自动降级为单连接流式下载。</p>
+      </div>
+      <div class="note">
+        <h4>内存占用</h4>
+        <p>分片在内存中合并后写入磁盘，超大文件（建议 &lt; 1GB）可能占用较多内存，请留意浏览器提示。</p>
+      </div>
+      <div class="note">
+        <h4>跨域墙</h4>
+        <p>浏览器无法绕过服务器未授权的跨域限制。若日志提示 CORS，请换用允许跨域的直链或自建中转代理。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>HYPERFLOW ENGINE · LOCAL ONLY · NO DATA UPLOADED</footer>
+</main>
+
+<script>
+/* ================================================================
+   常量 / DOM
+   ================================================================ */
+const $ = id => document.getElementById(id);
+const SAMPLE_URL = 'https://fastly.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const els = {
+  url: $('urlInput'),
+  name: $('nameInput'),
+  start: $('startBtn'),
+  paste: $('pasteBtn'),
+  sample: $('sampleBtn'),
+  reset: $('resetBtn'),
+  threadRange: $('threadRange'),
+  threadVal: $('threadVal'),
+  chips: $('chips'),
+  statusTag: $('statusTag'),
+  statusText: $('statusText'),
+  speed: $('speedVal'),
+  done: $('doneVal'),
+  eta: $('etaVal'),
+  conn: $('connVal'),
+  pct: $('pctVal'),
+  segInfo: $('segInfo'),
+  segments: $('segments'),
+  conns: $('conns'),
+  log: $('log'),
+  logMode: $('logMode'),
+};
+
+/* ================================================================
+   Worker 源码（以 Blob 方式注入，保持单文件）
+   ================================================================ */
+const WORKER_CODE = `
+self.onmessage = async function (e) {
+  var task = e.data;
+  var url = task.url, index = task.index, start = task.start, end = task.end;
+  var expected = end - start + 1;
+  try {
+    var headers = {};
+    if (start >= 0) headers['Range'] = 'bytes=' + start + '-' + end;
+    var resp = await fetch(url, { headers: headers, cache: 'no-store', mode: 'cors' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (resp.statusText || ''));
+    if (!resp.body) throw new Error('当前浏览器不支持流式读取');
+    var reader = resp.body.getReader();
+    var parts = [];
+    var received = 0;
+    while (true) {
+      var r = await reader.read();
+      if (r.done) break;
+      parts.push(r.value);
+      received += r.value.byteLength;
+      self.postMessage({ type: 'progress', index: index, delta: r.value.byteLength });
+    }
+    var buf = new ArrayBuffer(received);
+    var u8 = new Uint8Array(buf);
+    var off = 0;
+    for (var i = 0; i < parts.length; i++) { u8.set(parts[i], off); off += parts[i].byteLength; }
+    self.postMessage({ type: 'done', index: index, buffer: buf, bytes: received, expected: expected }, [buf]);
+  } catch (err) {
+    self.postMessage({ type: 'error', index: index, message: (err && err.message) ? err.message : String(err) });
+  }
+};
+`;
+
+let workerURL = null;
+function getWorkerURL() {
+  if (!workerURL) {
+    workerURL = URL.createObjectURL(new Blob([WORKER_CODE], { type: 'application/javascript' }));
+  }
+  return workerURL;
+}
+
+/* ================================================================
+   状态
+   ================================================================ */
+const state = {
+  status: 'idle',          // idle | probing | running | paused | merging | done | error
+  url: '',
+  filename: '',
+  total: 0,
+  mode: '',                // segmented | stream
+  chunks: [],
+  workers: [],
+  threads: 8,
+  controller: null,        // 流式下载用
+  fails: 0,
+  startedAt: 0,
+};
+
+let segEls = [];
+let tickTimer = null;
+let speed = 0;
+let lastSample = { t: 0, bytes: 0 };
+let nameEdited = false;
+
+/* ================================================================
+   工具函数
+   ================================================================ */
+function fmtBytes(n, digits) {
+  if (!n || n < 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  const d = digits === undefined ? (i === 0 ? 0 : (i === 1 ? 0 : 2)) : digits;
+  return v.toFixed(d) + ' ' + u[i];
+}
+function fmtSizeParts(n) {
+  if (!n) return { v: '0', u: 'B' };
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return { v: v.toFixed(i >= 2 ? 2 : 0), u: u[i] };
+}
+function fmtTime(sec) {
+  if (!isFinite(sec) || sec <= 0) return '—';
+  if (sec < 60) return Math.ceil(sec) + ' 秒';
+  if (sec < 3600) return Math.floor(sec / 60) + ' 分 ' + Math.floor(sec % 60) + ' 秒';
+  return Math.floor(sec / 3600) + ' 小时 ' + Math.floor((sec % 3600) / 60) + ' 分';
+}
+function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+function log(msg, type) {
+  const empty = els.log.querySelector('.log-empty');
+  if (empty) empty.remove();
+  const line = document.createElement('div');
+  line.className = 'log-line ' + (type || 'info');
+  const d = new Date();
+  const t = String(d.getHours()).padStart(2, '0') + ':' +
+            String(d.getMinutes()).padStart(2, '0') + ':' +
+            String(d.getSeconds()).padStart(2, '0');
+  line.innerHTML = '<span class="t">' + t + '</span><span>' + escapeHTML(msg) + '</span>';
+  els.log.appendChild(line);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function setStatus(s, text) {
+  state.status = s;
+  els.statusTag.dataset.s = s;
+  if (text) els.statusText.textContent = text;
+}
+
+function deriveName(url, cd) {
+  if (cd) {
+    const m1 = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+    if (m1) { try { return decodeURIComponent(m1[1]); } catch (e) {} }
+    const m2 = /filename\s*=\s*"([^"]+)"/i.exec(cd) || /filename\s*=\s*([^;]+)/i.exec(cd);
+    if (m2) return m2[1].trim().replace(/^"|"$/g, '');
+  }
+  try {
+    const u = new URL(url);
+    const seg = u.pathname.split('/').filter(Boolean).pop();
+    if (seg) return decodeURIComponent(seg);
+  } catch (e) {}
+  return 'download.bin';
+}
+
+/* ================================================================
+   探测：HEAD + Range 试探
+   ================================================================ */
+async function probe(url) {
+  const meta = { size: 0, ranges: false, filename: '', type: '' };
+
+  // 1) HEAD
+  try {
+    const r = await fetch(url, { method: 'HEAD', cache: 'no-store', mode: 'cors' });
+    if (r.ok) {
+      const len = Number(r.headers.get('content-length'));
+      if (len > 0) { meta.size = len; }
+      meta.type = r.headers.get('content-type') || '';
+      const ar = (r.headers.get('accept-ranges') || '').toLowerCase();
+      if (ar.includes('bytes')) meta.ranges = true;
+      meta.filename = deriveName(url, r.headers.get('content-disposition'));
+      log('HEAD 探测成功 · 大小 ' + (meta.size ? fmtBytes(meta.size) : '未知') +
+          ' · Range ' + (meta.ranges ? '已声明支持' : '未声明'), 'ok');
+    } else {
+      log('HEAD 返回 HTTP ' + r.status + '，改用 Range 试探', 'warn');
+    }
+  } catch (e) {
+    log('HEAD 请求失败（' + e.message + '），改用 Range 试探', 'warn');
+  }
+
+  // 2) Range 试探（带 0-0）
+  try {
+    const r = await fetch(url, { headers: { Range: 'bytes=0-0' }, cache: 'no-store', mode: 'cors' });
+    if (r.status === 206) {
+      meta.ranges = true;
+      const cr = r.headers.get('content-range');
+      if (cr) {
+        const total = parseInt(cr.split('/')[1], 10);
+        if (total > 0) meta.size = total;
+      }
+      log('Range 试探成功 · 服务端支持分段请求', 'ok');
+    } else if (r.ok) {
+      // 200：不支持 Range（或 Range 被忽略）
+      const len = Number(r.headers.get('content-length'));
+      if (!meta.size && len > 0) meta.size = len;
+      if (!meta.ranges) log('服务端忽略了 Range（返回 200），将降级为单连接', 'warn');
+    } else {
+      log('Range 试探返回 HTTP ' + r.status, 'warn');
+    }
+    try { r.body && r.body.cancel(); } catch (e) {}
+  } catch (e) {
+    throw new Error('无法读取该链接：' + e.message + '（可能是跨域 CORS 限制、链接失效或网络不可达）');
+  }
+
+  if (!meta.filename) meta.filename = deriveName(url);
+  return meta;
+}
+
+/* ================================================================
+   启动入口
+   ================================================================ */
+async function handleStart() {
+  if (state.status === 'running') { pause(); return; }
+  if (state.status === 'paused') { resume(); return; }
+
+  const url = els.url.value.trim();
+  if (!url) { shakeInput(); log('请输入有效的直链地址', 'err'); return; }
+  if (!/^https?:\/\//i.test(url)) { shakeInput(); log('地址需以 http:// 或 https:// 开头', 'err'); return; }
+
+  resetState(false);
+  state.url = url;
+  state.threads = Number(els.threadRange.value) || 8;
+  setStatus('probing', '探测中 · 正在读取文件信息');
+  els.start.disabled = true;
+  els.logMode.textContent = '探测文件信息';
+  log('开始探测：' + url, 'info');
+
+  let meta;
+  try {
+    meta = await probe(url);
+  } catch (e) {
+    setStatus('error', '失败 · 无法读取链接');
+    log(e.message, 'err');
+    log('提示：请确认链接允许跨域（CORS），或改用支持 Range 的直链。', 'warn');
+    els.start.disabled = false;
+    els.start.textContent = '重新尝试';
+    return;
+  }
+
+  state.filename = (nameEdited && els.name.value.trim()) ? els.name.value.trim() : (meta.filename || 'download.bin');
+  els.name.value = state.filename;
+  nameEdited = false;
+
+  // 决定模式
+  if (meta.ranges && meta.size > 0) {
+    state.mode = 'segmented';
+    state.total = meta.size;
+    buildSegments(meta.size);
+    log('采用多线程分片模式 · ' + state.chunks.length + ' 个分片 · 并发 ' + state.threads, 'ok');
+    els.logMode.textContent = '分片引擎 · ' + state.threads + ' 线程';
+    beginRunning();
+    startWorkers();
+  } else {
+    state.mode = 'stream';
+    state.total = meta.size || 0;
+    buildSingleSegment(meta.size || 0);
+    log('服务端不支持分段，降级为单连接流式下载（速度受单连接限制）', 'warn');
+    els.logMode.textContent = '降级模式 · 单连接流式';
+    startStream(url, meta);
+  }
+
+  els.start.disabled = false;
+}
+
+function shakeInput() {
+  els.url.parentElement.style.borderColor = 'rgba(255,111,111,.7)';
+  setTimeout(() => { els.url.parentElement.style.borderColor = ''; }, 700);
+}
+
+/* ================================================================
+   分片构建
+   ================================================================ */
+function buildSegments(total) {
+  const threads = state.threads;
+  let chunkSize = Math.max(256 * 1024, Math.ceil(total / (threads * 4)));
+  chunkSize = Math.min(chunkSize, 8 * 1024 * 1024);
+  let count = Math.ceil(total / chunkSize);
+  if (count > 128) {
+    chunkSize = Math.ceil(total / 128);
+    count = Math.ceil(total / chunkSize);
+  }
+
+  state.chunks = [];
+  for (let i = 0; i < count; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(total - 1, start + chunkSize - 1);
+    state.chunks.push({
+      i: i, start: start, end: end, size: end - start + 1,
+      status: 'pending', bytes: 0, buffer: null,
+    });
+  }
+  renderSegments();
+  els.segInfo.textContent = '共 ' + count + ' 个分片 · 每片约 ' + fmtBytes(chunkSize) + ' · 并发 ' + Math.min(threads, count);
+}
+
+function buildSingleSegment(size) {
+  state.chunks = [{ i: 0, start: 0, end: size ? size - 1 : -1, size: size || 0, status: 'pending', bytes: 0, buffer: null }];
+  renderSegments();
+  els.segInfo.textContent = '单连接流式下载' + (size ? ' · ' + fmtBytes(size) : '');
+}
+
+function renderSegments() {
+  els.segments.innerHTML = '';
+  segEls = [];
+  const n = state.chunks.length;
+  if (n === 0) return;
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement('div');
+    d.className = 'seg';
+    const c = state.chunks[i];
+    if (c.size) d.title = '分片 ' + (i + 1) + ' · ' + fmtBytes(c.size) +
+      ' · ' + fmtBytes(c.start) + ' - ' + fmtBytes(c.end);
+    const fill = document.createElement('i');
+    d.appendChild(fill);
+    els.segments.appendChild(d);
+    segEls.push(d);
+  }
+  // 分片过多时隐藏连接标签，避免拥挤
+  els.conns.style.display = n > 48 ? 'none' : 'flex';
+}
+
+/* ================================================================
+   Worker 池
+   ================================================================ */
+function spawnWorkers(n) {
+  const urlStr = getWorkerURL();
+  state.workers = [];
+  for (let i = 0; i < n; i++) {
+    let w;
+    try { w = new Worker(urlStr); }
+    catch (e) { log('Worker 创建失败：' + e.message, 'err'); continue; }
+    w.__busy = false;
+    w.__idx = null;
+    w.__slot = i + 1;
+    w.onmessage = ev => onWorkerMessage(w, ev.data);
+    w.onerror = err => {
+      log('Worker #' + w.__slot + ' 异常：' + (err.message || '未知错误'), 'err');
+      if (w.__idx !== null) {
+        const c = state.chunks[w.__idx];
+        if (c && c.status === 'active') { c.status = 'pending'; c.bytes = 0; }
+      }
+      w.__busy = false; w.__idx = null;
+      assignWork();
+    };
+    state.workers.push(w);
+  }
+}
+
+function terminateWorkers() {
+  state.workers.forEach(w => { try { w.terminate(); } catch (e) {} });
+  state.workers = [];
+}
+
+function startWorkers() {
+  terminateWorkers();
+  const n = Math.min(state.threads, state.chunks.length);
+  spawnWorkers(n);
+  log('已创建 ' + state.workers.length + ' 条并发连接', 'info');
+  assignWork();
+}
+
+function assignWork() {
+  if (state.status !== 'running') return;
+
+  const active = state.chunks.filter(c => c.status === 'active').length;
+  const pending = state.chunks.filter(c => c.status === 'pending');
+  if (pending.length === 0 && active === 0) { finalize(); return; }
+
+  for (const w of state.workers) {
+    if (w.__busy) continue;
+    const next = state.chunks.find(c => c.status === 'pending');
+    if (!next) break;
+    next.status = 'active';
+    next.bytes = 0;
+    w.__busy = true;
+    w.__idx = next.i;
+    try {
+      w.postMessage({ url: state.url, index: next.i, start: next.start, end: next.end });
+    } catch (err) {
+      next.status = 'pending';
+      w.__busy = false;
+      log('任务派发失败：' + err.message, 'err');
+    }
+  }
+}
+
+function onWorkerMessage(w, data) {
+  const c = data && state.chunks[data.index];
+  if (!c) return;
+
+  if (data.type === 'progress') {
+    c.bytes += data.delta || 0;
+    return;
+  }
+
+  if (data.type === 'done') {
+    c.buffer = data.buffer;
+    c.bytes = data.bytes;
+    c.status = 'done';
+    w.__busy = false; w.__idx = null;
+    if (data.expected && data.bytes !== data.expected) {
+      log('分片 #' + (c.i + 1) + ' 长度不匹配（' + fmtBytes(data.bytes) + ' / ' + fmtBytes(data.expected) + '）', 'warn');
+    }
+    assignWork();
+    return;
+  }
+
+  if (data.type === 'error') {
+    w.__busy = false; w.__idx = null;
+    if (data.message && /aborted|abort/i.test(data.message)) return; // 主动暂停
+    state.fails++;
+    log('分片 #' + (c.i + 1) + ' 下载失败：' + data.message + '（第 ' + state.fails + ' 次）', 'err');
+    c.status = 'pending';
+    c.bytes = 0;
+    if (state.fails >= 8) {
+      abortAll('失败次数过多，已停止。请检查链接是否支持跨域与分段。');
+      return;
+    }
+    setTimeout(assignWork, 300 * Math.min(state.fails, 5));
+    return;
+  }
+}
+
+/* ================================================================
+   运行 / 暂停 / 恢复
+   ================================================================ */
+function beginRunning() {
+  state.status = 'running';
+  state.startedAt = performance.now();
+  state.fails = 0;
+  setStatus('running', state.mode === 'stream' ? '加速中 · 单连接流式' : '加速中 · 并发下载');
+  els.start.textContent = '暂停';
+  els.start.classList.remove('primary');
+  els.start.classList.add('ghost');
+  resetSpeedSample();
+  startTicker();
+}
+
+function startTicker() {
+  stopTicker();
+  tickTimer = setInterval(tick, 200);
+}
+function stopTicker() {
+  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+}
+
+function downloaded() {
+  let s = 0;
+  for (const c of state.chunks) s += c.bytes || 0;
+  return s;
+}
+
+function resetSpeedSample() {
+  lastSample = { t: performance.now(), bytes: downloaded() };
+  speed = 0;
+}
+
+function tick() {
+  const now = performance.now();
+  const bytes = downloaded();
+
+  if (state.status === 'running') {
+    const dt = (now - lastSample.t) / 1000;
+    if (dt >= 0.35) {
+      const inst = Math.max(0, (bytes - lastSample.bytes) / dt);
+      speed = speed > 0 ? speed * 0.55 + inst * 0.45 : inst;
+      lastSample = { t: now, bytes: bytes };
+    }
+  } else {
+    speed = 0;
+  }
+
+  renderStats(bytes);
+}
+
+function renderStats(bytes) {
+  const total = state.total;
+  const sp = fmtSizeParts(speed);
+  els.speed.innerHTML = (speed > 0 ? sp.v : '0.00') + ' <small>' + (speed > 0 ? sp.u : 'MB') + '/s</small>';
+
+  const d = fmtSizeParts(bytes);
+  const t = fmtSizeParts(total);
+  els.done.innerHTML = d.v + ' <small>/ ' + (total ? t.v + ' ' + t.u : '—') + '</small>';
+
+  const eta = (speed > 0 && total > 0) ? Math.max(0, (total - bytes) / speed) : -1;
+  if (eta >= 0) {
+    if (eta < 60) {
+      els.eta.innerHTML = Math.ceil(eta) + ' <small>秒</small>';
+    } else if (eta < 3600) {
+      els.eta.innerHTML = Math.floor(eta / 60) + ' <small>分 ' + Math.floor(eta % 60) + ' 秒</small>';
+    } else {
+      els.eta.innerHTML = Math.floor(eta / 3600) + ' <small>时 ' + Math.floor((eta % 3600) / 60) + ' 分</small>';
+    }
+  } else {
+    els.eta.innerHTML = '— <small></small>';
+  }
+
+  const active = state.chunks.filter(c => c.status === 'active').length;
+  const poolSize = state.mode === 'stream' ? 1 : (state.workers.length || state.threads);
+  els.conn.innerHTML = active + ' <small>/ ' + poolSize + '</small>';
+
+  const pct = total > 0 ? clamp(bytes / total * 100, 0, 100) : 0;
+  els.pct.textContent = pct.toFixed(1) + '%';
+
+  // 分片条
+  for (let i = 0; i < state.chunks.length; i++) {
+    const c = state.chunks[i];
+    const el = segEls[i];
+    if (!el) continue;
+    if (c.status === 'done') {
+      el.classList.add('done');
+      el.firstChild.style.width = '100%';
+    } else if (c.status === 'error') {
+      el.classList.add('err');
+    } else {
+      el.classList.remove('done', 'err');
+      const p = c.size > 0 ? clamp(c.bytes / c.size * 100, 0, 100) : 0;
+      el.firstChild.style.width = p.toFixed(1) + '%';
+    }
+  }
+
+  // 连接标签
+  renderConns(active);
+}
+
+function renderConns(active) {
+  const n = state.chunks.length;
+  if (n > 48) return;
+  let html = '';
+  let shown = 0;
+  for (let i = 0; i < state.chunks.length && shown < 12; i++) {
+    const c = state.chunks[i];
+    if (c.status === 'active') {
+      const p = c.size > 0 ? clamp(c.bytes / c.size * 100, 0, 100) : 0;
+      html += '<span class="conn"># ' + (i + 1) + ' <b>' + p.toFixed(0) + '%</b></span>';
+      shown++;
+    }
+  }
+  if (shown === 0) {
+    for (let i = 0; i < state.chunks.length && shown < 12; i++) {
+      const c = state.chunks[i];
+      if (c.status === 'done') {
+        html += '<span class="conn idle"># ' + (i + 1) + ' 完成</span>';
+        shown++;
+      }
+    }
+  }
+  els.conns.innerHTML = html;
+}
+
+/* ================================================================
+   暂停 / 恢复 / 重置
+   ================================================================ */
+function pause() {
+  if (state.status !== 'running' && state.status !== 'probing') return;
+  setStatus('paused', '已暂停 · 分片进度保留');
+  terminateWorkers();
+  if (state.mode === 'stream' && state.controller) {
+    try { state.controller.abort(); } catch (e) {}
+    state.controller = null;
+    log('单连接流式下载不支持断点续传，继续时将从头开始', 'warn');
+  }
+  state.chunks.forEach(c => {
+    if (c.status === 'active' || state.mode === 'stream') { c.status = 'pending'; c.bytes = 0; }
+  });
+  stopTicker();
+  speed = 0;
+  renderStats(downloaded());
+  els.start.disabled = false;
+  els.start.textContent = '继续下载';
+  els.start.classList.add('primary');
+  els.start.classList.remove('ghost');
+  log('已暂停，未完成分片将重新排队', 'warn');
+}
+
+function resume() {
+  if (state.status !== 'paused') return;
+  setStatus('running', '加速中 · 并发下载');
+  els.start.textContent = '暂停';
+  els.start.classList.remove('primary');
+  els.start.classList.add('ghost');
+  resetSpeedSample();
+  startTicker();
+  if (state.mode === 'segmented') startWorkers();
+  else startStream(state.url, {});
+  log('继续下载', 'ok');
+}
+
+function abortAll(msg) {
+  terminateWorkers();
+  if (state.controller) { try { state.controller.abort(); } catch (e) {} state.controller = null; }
+  stopTicker();
+  setStatus('error', '已停止');
+  log(msg, 'err');
+  els.start.disabled = false;
+  els.start.textContent = '重新开始';
+  els.start.classList.add('primary');
+  els.start.classList.remove('ghost');
+}
+
+function resetState(clearInput) {
+  terminateWorkers();
+  if (state.controller) { try { state.controller.abort(); } catch (e) {} state.controller = null; }
+  stopTicker();
+  state.status = 'idle';
+  state.chunks = [];
+  state.total = 0;
+  state.mode = '';
+  state.fails = 0;
+  speed = 0;
+  segEls = [];
+  els.segments.innerHTML = '';
+  els.conns.innerHTML = '';
+  els.segInfo.textContent = '等待任务 · 0 个分片';
+  els.pct.textContent = '0.0%';
+  els.speed.innerHTML = '0.00 <small>MB/s</small>';
+  els.done.innerHTML = '0 <small>/ —</small>';
+  els.eta.innerHTML = '— <small></small>';
+  els.conn.innerHTML = '0 <small>/ 0</small>';
+  setStatus('idle', '待机中 · 等待直链');
+  els.start.disabled = false;
+  els.start.textContent = '开始加速';
+  els.start.classList.add('primary');
+  els.start.classList.remove('ghost');
+  if (clearInput) {
+    els.url.value = '';
+    els.name.value = '';
+    nameEdited = false;
+    els.log.innerHTML = '<div class="log-empty">// 引擎已初始化，等待直链输入…</div>';
+    els.logMode.textContent = '自动降级引擎就绪';
+  }
+}
+
+/* ================================================================
+   单连接流式降级
+   ================================================================ */
+async function startStream(url, meta) {
+  beginRunning();
+  const controller = new AbortController();
+  state.controller = controller;
+
+  try {
+    const resp = await fetch(url, { signal: controller.signal, cache: 'no-store', mode: 'cors' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    if (!resp.body) throw new Error('浏览器不支持流式读取');
+    const len = Number(resp.headers.get('content-length')) || state.total || 0;
+    if (len && state.total !== len) {
+      state.total = len;
+      state.chunks[0].size = len;
+    }
+    const reader = resp.body.getReader();
+    const parts = [];
+    let recv = 0;
+    state.chunks[0].status = 'active';
+    while (true) {
+      const r = await reader.read();
+      if (r.done) break;
+      parts.push(r.value);
+      recv += r.value.byteLength;
+      state.chunks[0].bytes = recv;
+      if (state.total) els.pct.textContent = (recv / state.total * 100).toFixed(1) + '%';
+    }
+    state.chunks[0].buffer = new Blob(parts);
+    state.chunks[0].bytes = recv;
+    state.chunks[0].status = 'done';
+    log('流式下载完成 · ' + fmtBytes(recv), 'ok');
+    finalize();
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    stopTicker();
+    setStatus('error', '下载失败');
+    log('错误：' + e.message, 'err');
+    els.start.disabled = false;
+    els.start.textContent = '重新开始';
+    els.start.classList.add('primary');
+    els.start.classList.remove('ghost');
+  }
+}
+
+/* ================================================================
+   合并保存
+   ================================================================ */
+function finalize() {
+  if (state.status === 'merging' || state.status === 'done') return;
+  terminateWorkers();
+  stopTicker();
+  state.status = 'merging';
+  setStatus('merging', '合并中 · 正在写入文件');
+  speed = 0;
+  log('全部分片完成，开始合并…', 'info');
+
+  setTimeout(() => {
+    try {
+      const missing = state.chunks.filter(c => !c.buffer);
+      if (missing.length) throw new Error('仍有 ' + missing.length + ' 个分片缺失');
+
+      let blob;
+      if (state.chunks.length === 1 && state.chunks[0].buffer instanceof Blob) {
+        blob = state.chunks[0].buffer;
+      } else {
+        blob = new Blob(state.chunks.map(c => c.buffer), { type: 'application/octet-stream' });
+      }
+
+      const name = (els.name.value.trim() || state.filename || 'download.bin');
+      const a = document.createElement('a');
+      const objURL = URL.createObjectURL(blob);
+      a.href = objURL;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objURL), 60000);
+
+      setStatus('done', '完成 · ' + fmtBytes(blob.size));
+      els.pct.textContent = '100.0%';
+      els.start.textContent = '再次下载';
+      els.start.classList.add('primary');
+      els.start.classList.remove('ghost');
+      els.start.disabled = false;
+      els.speed.innerHTML = '0.00 <small>MB/s</small>';
+      log('文件已保存：' + name + ' · ' + fmtBytes(blob.size), 'ok');
+
+      // 释放分片内存引用
+      state.chunks.forEach(c => { c.buffer = null; });
+    } catch (e) {
+      setStatus('error', '合并失败');
+      log('合并失败：' + e.message, 'err');
+      els.start.disabled = false;
+      els.start.textContent = '重新下载';
+    }
+  }, 260);
+}
+
+/* ================================================================
+   事件绑定
+   ================================================================ */
+els.threadRange.addEventListener('input', () => {
+  const v = Number(els.threadRange.value);
+  els.threadVal.textContent = v;
+  els.threadRange.style.setProperty('--p', ((v - 1) / 31 * 100) + '%');
+  state.threads = v;
+  [...els.chips.children].forEach(ch => ch.classList.toggle('on', Number(ch.dataset.n) === v));
+});
+els.threadRange.style.setProperty('--p', ((8 - 1) / 31 * 100) + '%');
+
+els.chips.addEventListener('click', e => {
+  const btn = e.target.closest('.chip');
+  if (!btn) return;
+  const n = Number(btn.dataset.n);
+  els.threadRange.value = n;
+  els.threadRange.dispatchEvent(new Event('input'));
+});
+
+els.start.addEventListener('click', handleStart);
+
+els.url.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); handleStart(); }
+});
+
+els.name.addEventListener('input', () => { nameEdited = true; });
+
+els.paste.addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) { els.url.value = text.trim(); els.url.focus(); log('已从剪贴板读取地址', 'ok'); }
+    else log('剪贴板为空', 'warn');
+  } catch (err) {
+    els.url.focus();
+    log('浏览器拒绝了剪贴板访问，请手动粘贴（Ctrl+V）', 'warn');
+  }
+});
+
+els.sample.addEventListener('click', () => {
+  els.url.value = SAMPLE_URL;
+  els.name.value = 'three.module.js';
+  log('已填入示例直链（jsDelivr，支持 Range 与 CORS）', 'ok');
+});
+
+els.reset.addEventListener('click', () => {
+  resetState(true);
+  log('已重置所有任务', 'info');
+});
+
+/* 初始渲染 */
+resetState(false);
+els.log.innerHTML = '<div class="log-empty">// 引擎已初始化，等待直链输入…</div>';
+</script>
+</body>
+</html>
